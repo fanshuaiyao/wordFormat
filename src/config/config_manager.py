@@ -8,22 +8,33 @@ class ConfigManager:
         self.config = self._load_config()
 
     def _load_config(self):
-        """加载配置文件"""
+        """加载配置文件，先加载内置默认配置，再用用户配置覆盖"""
+        # 加载内置默认配置
+        default_config = {}
+        default_config_path = Path(__file__).parent / "config.json"
         try:
-            # 确保配置目录存在
+            if default_config_path.exists():
+                with open(default_config_path, 'r', encoding='utf-8') as f:
+                    default_config = json.load(f)
+        except Exception as e:
+            print(f"加载默认配置失败: {str(e)}")
+
+        # 加载用户配置并覆盖默认值
+        try:
             self.config_file.parent.mkdir(parents=True, exist_ok=True)
-            
-            # 如果配置文件存在，则加载它
             if self.config_file.exists():
                 with open(self.config_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            
-            # 如果配置文件不存在，返回默认配置
-            return {}
-            
+                    user_config = json.load(f)
+                # 深度合并：用户配置覆盖默认配置
+                for key, value in user_config.items():
+                    if isinstance(value, dict) and isinstance(default_config.get(key), dict):
+                        default_config[key].update(value)
+                    else:
+                        default_config[key] = value
         except Exception as e:
-            print(f"加载配置文件失败: {str(e)}")
-            return {}
+            print(f"加载用户配置文件失败: {str(e)}")
+
+        return default_config
 
     def _save_config(self):
         """保存配置到文件"""
@@ -90,28 +101,21 @@ class ConfigManager:
             print(f"保存用户模板失败: {str(e)}")
             return None
     
-    def save_config(self):
-        """保存配置到文件"""
-        try:
-            with open(self.config_path, 'w', encoding='utf-8') as f:
-                yaml.dump(self.config, f, allow_unicode=True)
-        except Exception as e:
-            print(f"保存配置文件失败: {str(e)}")
-    
     def is_ai_enabled(self) -> bool:
         """检查是否启用AI功能"""
-        return self.config["ai_assistant"]["enabled"]
-    
+        return self.config.get("ai_assistant", {}).get("enabled", False)
+
     def get_ai_model(self) -> str:
         """获取AI模型名称"""
-        return self.config["ai_assistant"]["model"]
-    
+        return self.config.get("ai_assistant", {}).get("model", "gpt-3.5-turbo")
+
     def get_template_path(self) -> str:
         """获取当前使用的模板路径"""
-        if not self.config["formatting"]["use_default_template"] and \
-           self.config["formatting"]["user_template_path"]:
-            return self.config["formatting"]["user_template_path"]
-        
-        # 使用绝对路径
-        default_path = Path(__file__).parent.parent / "core" / "presets" / "default.yaml"
-        return str(default_path) 
+        formatting = self.config.get("formatting", {})
+        if not formatting.get("use_default_template", True):
+            user_path = formatting.get("user_template_path")
+            if user_path:
+                return user_path
+
+        default_path = Path(__file__).parent.parent / "core" / "presets" / "default.json"
+        return str(default_path)

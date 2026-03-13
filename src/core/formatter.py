@@ -1,39 +1,71 @@
-from docx.shared import Pt, Inches, Cm, Mm
+from docx.shared import Pt, Inches
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from docx.oxml.ns import qn
+from src.core.format_spec import DocumentFormat, SectionFormat
+
+
+ALIGNMENT_MAP = {
+    "CENTER": WD_PARAGRAPH_ALIGNMENT.CENTER,
+    "LEFT": WD_PARAGRAPH_ALIGNMENT.LEFT,
+    "RIGHT": WD_PARAGRAPH_ALIGNMENT.RIGHT,
+    "JUSTIFY": WD_PARAGRAPH_ALIGNMENT.JUSTIFY,
+}
+
 
 class WordFormatter:
     def __init__(self, document, config_manager):
         self.document = document
         self.config_manager = config_manager
-        self.format_spec = {}
+        self.format_spec: DocumentFormat = None
 
-    def set_format_spec(self, format_spec):
+    def set_format_spec(self, format_spec: DocumentFormat):
         """设置格式规范"""
         self.format_spec = format_spec
-        print("格式规范已更新:", format_spec)
 
     def format(self):
         """应用格式到文档"""
+        if not self.format_spec:
+            print("未设置格式规范，跳过格式化")
+            return False
+
         try:
-            doc = self.document.doc
+            doc = self.document
             print("开始应用格式...")
-            
-            in_references = False  # 标记是否在参考文献部分
-            
-            # 遍历所有段落
-            for paragraph in doc.paragraphs:
-                if "参考文献" in paragraph.text:
-                    in_references = True
-                    self._apply_references_format(paragraph)
-                elif in_references:
-                    self._apply_references_format(paragraph)
-                elif "摘要" in paragraph.text:
-                    self._apply_abstract_format(paragraph)
-                elif paragraph.style.name.startswith('Heading'):
-                    self._apply_heading_format(paragraph)
-                else:
-                    self._apply_body_format(paragraph)
+
+            # 应用页边距
+            self._apply_page_margins()
+
+            # 格式化标题
+            if doc.title:
+                self._apply_section_format(doc.title, self.format_spec.title)
+
+            # 格式化摘要
+            if doc.abstract:
+                self._apply_section_format(doc.abstract, self.format_spec.abstract)
+
+            # 格式化关键词
+            if doc.keywords:
+                self._apply_section_format(doc.keywords, self.format_spec.keywords)
+
+            # 格式化各章节（标题 + 正文段落）
+            for section_name, paragraphs in doc.sections.items():
+                # 查找并格式化章节标题段落
+                heading_para = self._find_heading_paragraph(section_name)
+                if heading_para:
+                    if self._is_main_heading(section_name):
+                        self._apply_section_format(heading_para, self.format_spec.heading1)
+                    else:
+                        self._apply_section_format(heading_para, self.format_spec.heading2)
+
+                # 判断是否为参考文献章节
+                is_references = '参考文献' in section_name or 'references' in section_name.lower()
+
+                # 格式化章节内的段落
+                for para in paragraphs:
+                    if is_references:
+                        self._apply_section_format(para, self.format_spec.references)
+                    else:
+                        self._apply_section_format(para, self.format_spec.body)
 
             print("格式应用完成")
             return True
@@ -42,157 +74,74 @@ class WordFormatter:
             print(f"格式化失败: {str(e)}")
             raise
 
-    def _apply_abstract_format(self, paragraph):
-        """应用摘要格式"""
-        spec = self.format_spec.get('abstract', {})
-        title_spec = spec.get('title', {})
-        content_spec = spec.get('content', {})
-        margin_spec = spec.get('margin', {})
-        
-        if "摘要" in paragraph.text:
-            # 应用标题格式
-            self._apply_font_format(paragraph, title_spec)
-            # 应用对齐方式
-            align_map = {
-                "居中": WD_PARAGRAPH_ALIGNMENT.CENTER,
-                "左对齐": WD_PARAGRAPH_ALIGNMENT.LEFT,
-                "右对齐": WD_PARAGRAPH_ALIGNMENT.RIGHT
-            }
-            if 'align' in title_spec:
-                paragraph.alignment = align_map.get(title_spec['align'], WD_PARAGRAPH_ALIGNMENT.CENTER)
-        else:
-            # 应用正文格式
-            self._apply_font_format(paragraph, content_spec)
-            # 应用行间距
-            if 'line_spacing' in content_spec:
-                paragraph.paragraph_format.line_spacing = content_spec['line_spacing']
-            # 应用段落间距
-            if 'para_spacing' in content_spec:
-                paragraph.paragraph_format.space_after = Pt(content_spec['para_spacing'])
-            # 应用首行缩进
-            if 'first_line_indent' in content_spec:
-                paragraph.paragraph_format.first_line_indent = Pt(content_spec['first_line_indent'] * content_spec.get('size', 12))
-            # 应用对齐方式
-            align_map = {
-                "两端对齐": WD_PARAGRAPH_ALIGNMENT.JUSTIFY,
-                "左对齐": WD_PARAGRAPH_ALIGNMENT.LEFT,
-                "右对齐": WD_PARAGRAPH_ALIGNMENT.RIGHT,
-                "居中": WD_PARAGRAPH_ALIGNMENT.CENTER
-            }
-            if 'align' in content_spec:
-                paragraph.alignment = align_map.get(content_spec['align'], WD_PARAGRAPH_ALIGNMENT.JUSTIFY)
-        
-        # 应用页边距
-        section = paragraph.part.document.sections[0]
-        if margin_spec:
-            if 'top' in margin_spec:
-                section.top_margin = Mm(margin_spec['top'])
-            if 'bottom' in margin_spec:
-                section.bottom_margin = Mm(margin_spec['bottom'])
-            if 'left' in margin_spec:
-                section.left_margin = Mm(margin_spec['left'])
-            if 'right' in margin_spec:
-                section.right_margin = Mm(margin_spec['right'])
+    def _find_heading_paragraph(self, section_name):
+        """在文档段落中查找与章节名匹配的标题段落"""
+        for para in self.document.doc.paragraphs:
+            if para.text.strip() == section_name:
+                return para
+        return None
 
-    def _apply_heading_format(self, paragraph):
-        """应用标题格式"""
-        spec = self.format_spec.get('main_text', {}).get('chapter', {})
-        self._apply_font_format(paragraph, spec)
-        
-        # 应用对齐方式
-        align_map = {
-            "居中": WD_PARAGRAPH_ALIGNMENT.CENTER,
-            "左对齐": WD_PARAGRAPH_ALIGNMENT.LEFT,
-            "右对齐": WD_PARAGRAPH_ALIGNMENT.RIGHT
-        }
-        if 'align' in spec:
-            paragraph.alignment = align_map.get(spec['align'], WD_PARAGRAPH_ALIGNMENT.LEFT)
-        
-        # 应用段后间距
-        if 'spacing' in spec:
-            paragraph.paragraph_format.space_after = Pt(spec['spacing'])
+    def _is_main_heading(self, text):
+        """判断是否为一级标题"""
+        text = text.strip()
+        # 阿拉伯数字编号（如 "1." 或 "1. 引言"）
+        if any(text.startswith(f"{i}.") for i in range(1, 10)):
+            return True
+        # 中文数字编号（如 "一、引言"）
+        chinese_numbers = ['一', '二', '三', '四', '五', '六', '七', '八', '九']
+        if any(text.startswith(f"{num}、") for num in chinese_numbers):
+            return True
+        # 一级标题关键词
+        main_keywords = ['引言', '介绍', '研究背景', '研究方法', '实验', '结果', '讨论', '结论', '参考文献']
+        return any(text.startswith(kw) for kw in main_keywords)
 
-    def _apply_body_format(self, paragraph):
-        """应用正文格式"""
-        spec = self.format_spec.get('main_text', {}).get('body', {})
-        self._apply_font_format(paragraph, spec)
-        
-        # 应用行间距
-        if 'line_spacing' in spec:
-            paragraph.paragraph_format.line_spacing = spec['line_spacing']
-            
-        # 应用段落间距
-        if 'para_spacing' in spec:
-            paragraph.paragraph_format.space_after = Pt(spec['para_spacing'])
-            
-        # 应用首行缩进
-        if 'first_line_indent' in spec:
-            paragraph.paragraph_format.first_line_indent = Pt(spec['first_line_indent'] * spec.get('size', 12))
-            
-        # 应用对齐方式
-        align_map = {
-            "两端对齐": WD_PARAGRAPH_ALIGNMENT.JUSTIFY,
-            "左对齐": WD_PARAGRAPH_ALIGNMENT.LEFT,
-            "右对齐": WD_PARAGRAPH_ALIGNMENT.RIGHT,
-            "居中": WD_PARAGRAPH_ALIGNMENT.CENTER
-        }
-        if 'align' in spec:
-            paragraph.alignment = align_map.get(spec['align'], WD_PARAGRAPH_ALIGNMENT.JUSTIFY)
-
-    def _apply_font_format(self, paragraph, spec):
-        """应用字体格式"""
+    def _apply_section_format(self, paragraph, spec: SectionFormat):
+        """统一的段落格式化方法"""
         if not spec:
             return
-            
+
+        # 字体格式
         for run in paragraph.runs:
-            if 'font' in spec:
-                run.font.name = spec['font']
-                # 设置中文字体
-                run._element.rPr.rFonts.set(qn('w:eastAsia'), spec['font'])
-            if 'size' in spec:
-                run.font.size = Pt(spec['size'])
-    
-    def _apply_references_format(self, paragraph):
-        """应用参考文献格式"""
-        spec = self.format_spec.get('references', {})
-        title_spec = spec.get('title', {})
-        items_spec = spec.get('items', {})
-        
-        if "参考文献" in paragraph.text:
-            # 应用标题格式
-            self._apply_font_format(paragraph, title_spec)
-            # 应用对齐方式
-            align_map = {
-                "居中": WD_PARAGRAPH_ALIGNMENT.CENTER,
-                "左对齐": WD_PARAGRAPH_ALIGNMENT.LEFT,
-                "右对齐": WD_PARAGRAPH_ALIGNMENT.RIGHT
-            }
-            if 'align' in title_spec:
-                paragraph.alignment = align_map.get(title_spec['align'], WD_PARAGRAPH_ALIGNMENT.CENTER)
-            # 应用段后间距
-            if 'spacing' in title_spec:
-                paragraph.paragraph_format.space_after = Pt(title_spec['spacing'])
+            run.font.name = spec.font_name
+            run.font.size = Pt(spec.font_size)
+            run.font.bold = spec.bold
+            run.font.italic = spec.italic
+            # 设置中文字体（东亚字体）
+            rPr = run._element.get_or_add_rPr()
+            rFonts = rPr.find(qn('w:rFonts'))
+            if rFonts is None:
+                from lxml import etree
+                rFonts = etree.SubElement(rPr, qn('w:rFonts'))
+            rFonts.set(qn('w:eastAsia'), spec.font_name)
+
+        # 对齐方式
+        paragraph.alignment = ALIGNMENT_MAP.get(spec.alignment, WD_PARAGRAPH_ALIGNMENT.LEFT)
+
+        # 段落格式
+        pf = paragraph.paragraph_format
+        pf.line_spacing = spec.line_spacing
+        pf.space_before = Pt(spec.space_before)
+        pf.space_after = Pt(spec.space_after)
+
+        # 首行缩进 / 悬挂缩进
+        if spec.first_line_indent > 0:
+            pf.first_line_indent = Pt(spec.first_line_indent)
+            pf.left_indent = None
+        elif spec.first_line_indent < 0:
+            # 负值表示悬挂缩进：首行回退，左缩进补偿
+            pf.first_line_indent = Pt(spec.first_line_indent)
+            pf.left_indent = Pt(abs(spec.first_line_indent))
         else:
-            # 应用条目格式
-            self._apply_font_format(paragraph, items_spec)
-            # 应用行间距
-            if 'line_spacing' in items_spec:
-                paragraph.paragraph_format.line_spacing = items_spec['line_spacing']
-            # 应用条目间距
-            if 'para_spacing' in items_spec:
-                paragraph.paragraph_format.space_after = Pt(items_spec['para_spacing'])
-            # 应用悬挂缩进
-            if 'hanging_indent' in items_spec:
-                # 设置首行缩进为负值，左缩进为正值，实现悬挂缩进
-                char_width = Pt(items_spec.get('size', 12))  # 使用字号计算字符宽度
-                indent = items_spec['hanging_indent'] * char_width
-                paragraph.paragraph_format.first_line_indent = -indent
-                paragraph.paragraph_format.left_indent = indent
-            # 应用对齐方式
-            align_map = {
-                "两端对齐": WD_PARAGRAPH_ALIGNMENT.JUSTIFY,
-                "左对齐": WD_PARAGRAPH_ALIGNMENT.LEFT
-            }
-            if 'align' in items_spec:
-                paragraph.alignment = align_map.get(items_spec['align'], WD_PARAGRAPH_ALIGNMENT.JUSTIFY)
-    
+            pf.first_line_indent = None
+            pf.left_indent = None
+
+    def _apply_page_margins(self):
+        """应用页边距"""
+        margins = self.format_spec.page_margin
+        if not margins:
+            return
+        section = self.document.doc.sections[0]
+        section.top_margin = Inches(margins.get("top", 1.0))
+        section.bottom_margin = Inches(margins.get("bottom", 1.0))
+        section.left_margin = Inches(margins.get("left", 1.25))
+        section.right_margin = Inches(margins.get("right", 1.25))

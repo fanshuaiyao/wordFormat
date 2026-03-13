@@ -4,94 +4,67 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Word document formatting tool (w0rdF0rmat) designed to automate the formatting of academic papers. It intelligently identifies document structures (titles, abstracts, keywords, sections, etc.) and applies specified formatting requirements. The tool supports multiple parsing methods (style-based, traditional parsing, and AI-assisted analysis) and provides flexible configuration options.
+w0rdF0rmat is a Python tool that automates formatting of academic papers in Word (.docx) format. It identifies document structures (titles, abstracts, keywords, numbered/Chinese-numbered sections) and applies formatting rules from YAML templates. The project is bilingual (Chinese + English) in comments, UI, and README. It is currently **Windows-only** due to the `pywin32` dependency.
 
 ## Key Commands
 
-### Running the Application
-
-- **Run CLI version**: `python main.py`
-  - Processes the test document at `./test/test.docx`
-  - Saves output to `./test/output.docx`
-
-- **Run GUI version**: `python run_gui.py`
-  - Launches a PyQt6 GUI interface for interactive document formatting
-  - Handles icon loading gracefully with fallback mechanisms
-
-### Dependencies
-
-Install dependencies with:
 ```bash
+# Install dependencies
 pip install -r requirements.txt
+
+# Run CLI (processes ./test/test.docx → ./test/output.docx)
+python main.py
+
+# Run GUI (PyQt6 interface)
+python run_gui.py
 ```
 
-Key dependencies:
-- `python-docx` for Word document processing
-- `PyQt6` for GUI interface
-- `openai` for AI assistance features
-- `PyYAML` for configuration files
+There is no automated test suite, linter, or CI pipeline. Testing is manual: place a `.docx` in `test/`, run `main.py`, and inspect the output.
 
-## Architecture Overview
+## Architecture
 
-### Core Components
+### Processing Pipeline
 
-1. **Document Processing (`src/core/`)**
-   - `document.py`: Main document class that parses Word files using multiple strategies
-   - `formatter.py`: Applies formatting rules to document elements
-   - `format_spec.py`: Defines formatting specifications and rules
-   - `ai_assistant.py`: Optional AI-powered document analysis
+```
+Input .docx
+    → Document.__init__() parses structure via 3-strategy fallback:
+        1. Style-based: reads paragraph.style.name (e.g. "Title", "Heading 1", "标题")
+        2. Traditional: keyword matching ("摘要", "Abstract", numbered headings)
+        3. AI-assisted: sends text to OpenAI API (only if enabled in config)
+    → Produces internal model: title, abstract, keywords, sections dict
+    → WordFormatter.format() applies FormatSpec rules from YAML template
+    → Document.save() writes output .docx
+```
 
-2. **Configuration System (`src/config/`)**
-   - `config_manager.py`: Manages both global config (`~/.w0rdF0rmat/config.json`) and project-specific settings
-   - `config.yaml`: Global configuration file for AI and formatting options
-   - `presets/default.yaml`: Default formatting template with detailed style definitions
+### Core Modules
 
-3. **GUI Interface (`src/gui/`)**
-   - `main_window.py`: Main application window
-   - `pages/`: Contains document, format, and preview pages
-   - `components/`: Reusable GUI components like loading indicators
+- **`src/core/document.py`** — `Document` class wraps `python-docx`, owns the 3-strategy parsing pipeline. Stores parsed structure as `self.title`, `self.abstract`, `self.keywords`, `self.sections` (dict of section name → list of paragraphs).
+- **`src/core/formatter.py`** — `WordFormatter` takes a `Document` + `ConfigManager`, loads the format template, applies font/size/alignment/spacing/margins to each element type.
+- **`src/core/format_spec.py`** — Defines formatting specification data structures (the schema between YAML templates and the formatter).
+- **`src/core/format_validator.py`** — Validates format specifications before applying.
+- **`src/core/ai_assistant.py`** — `DocumentAI` class, optional OpenAI integration for ambiguous structures. Requires API key via `.env`.
 
-### Document Parsing Strategies
+### Configuration
 
-The tool uses a hierarchical approach to document parsing:
+- **`src/config/config.yaml`** — Global settings: AI toggle, model selection, template path.
+- **`src/core/presets/default.yaml`** — Default formatting template defining per-element styles.
+- **`src/config/config_manager.py`** — `ConfigManager` merges global config (`config.yaml`) with user config (`~/.w0rdF0rmat/config.json`). Also handles per-project `format_template.json`.
 
-1. **Style-based parsing**: First attempts to parse using built-in Word styles
-2. **Traditional parsing**: Falls back to keyword-based text analysis
-3. **AI-assisted parsing**: Uses AI for complex document structures when enabled
+### GUI (`src/gui/`)
 
-### Formatting System
+- `main_window.py` — PyQt6 `QMainWindow`, hosts three pages.
+- `pages/document_page.py` — File selection/loading.
+- `pages/format_page.py` — Template selection and customization.
+- `pages/preview_page.py` — Rendered preview (uses PyMuPDF/WebEngine).
+- `run_gui.py` — Entry point with 3-level icon fallback.
 
-Formatting specifications are defined in YAML files with support for:
-- Text formatting (font, size, bold, italic)
-- Paragraph alignment and spacing
-- Page margins and layout
-- Table formatting with custom styles
-- Image positioning and captions
-- Table of contents configuration
+### Section Detection Heuristics
 
-## Configuration Details
+The traditional parser recognizes sections by:
+- Arabic numbered headings (`1.`, `2.`, etc.)
+- Chinese numbered headings (`一、`, `二、`, etc.)
+- Chinese academic keywords (`引言`, `研究方法`, `实验`, `结果`, `讨论`, `结论`, `参考文献`)
 
-### Global Config Location
-- User configurations are stored at `~/.w0rdF0rmat/config.json`
-- Project-specific templates are saved as `format_template.json` in the project directory
+## Dependencies
 
-### Configuration Options
-- AI assistant can be enabled/disabled in `config.yaml`
-- Templates can be switched between default and custom
-- User-defined formats are persisted across sessions
-
-## Key Files and Directories
-
-- `main.py`: CLI entry point that processes test documents
-- `run_gui.py`: GUI application launcher
-- `src/config/config.yaml`: Global configuration
-- `src/core/presets/default.yaml`: Default formatting template
-- `test/test.docx`: Sample document for testing
-- `src/gui/`: Complete PyQt6 GUI implementation
-
-## Development Notes
-
-- The GUI handles missing icons gracefully by creating default icons
-- Configuration system automatically creates necessary directories
-- AI features are optional and require proper API key configuration
-- The tool preserves document structure while applying formatting
+Core: `python-docx`, `openai`, `python-dotenv`, `pyyaml`. GUI adds: `PyQt6`, `PyQt6-WebEngine`, `Pillow`, `PyMuPDF`, `pywin32`. Python ≥ 3.8 required.

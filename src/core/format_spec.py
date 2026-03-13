@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Dict, Optional, List
 import json
-import yaml
 from pathlib import Path
 
 @dataclass
@@ -188,10 +187,10 @@ class FormatSpecParser:
         preset_path = Path(__file__).parent / "presets"
         
         if preset_path.exists():
-            for format_file in preset_path.glob("*.yaml"):
+            for format_file in preset_path.glob("*.json"):
                 try:
                     with open(format_file, 'r', encoding='utf-8') as f:
-                        format_data = yaml.safe_load(f)
+                        format_data = json.load(f)
                         self.preset_formats[format_file.stem] = self._parse_format_data(format_data)
                 except Exception as e:
                     print(f"加载预设格式 {format_file.name} 失败: {str(e)}")
@@ -203,15 +202,12 @@ class FormatSpecParser:
     
     def parse_format_file(self, file_path: str) -> Optional[DocumentFormat]:
         """
-        解析格式文件（支持YAML和JSON）
+        解析格式文件（JSON）
         """
         try:
             path = Path(file_path)
             with open(path, 'r', encoding='utf-8') as f:
-                if path.suffix.lower() == '.yaml':
-                    format_data = yaml.safe_load(f)
-                else:
-                    format_data = json.load(f)
+                format_data = json.load(f)
                 return self._parse_format_data(format_data)
         except Exception as e:
             print(f"解析格式文件失败: {str(e)}")

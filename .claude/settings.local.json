@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd \"E:/桌面/claude/w0rdF0rmat\" && python main.py 2>&1)"
+    ]
+  }
+}

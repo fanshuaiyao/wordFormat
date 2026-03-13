@@ -1,0 +1,11 @@
+{
+  "ai_assistant": {
+    "enabled": false,
+    "model": "gpt-3.5-turbo"
+  },
+  "formatting": {
+    "use_default_template": true,
+    "template_path": "src/core/presets/default.json",
+    "user_template_path": null
+  }
+}

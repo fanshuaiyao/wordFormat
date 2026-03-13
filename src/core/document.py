@@ -2,7 +2,6 @@ from docx import Document as DocxDocument
 from docx.shared import Pt, Inches
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from docx.enum.style import WD_STYLE_TYPE
-from .ai_assistant import DocumentAI
 import json
 from typing import Dict, Any
 
@@ -24,6 +23,7 @@ class Document:
             if not self._parse_document_traditional():
                 # 如果传统方法也失败，且AI功能已启用，则使用AI分析
                 if self.config_manager and self.config_manager.is_ai_enabled():
+                    from .ai_assistant import DocumentAI
                     self.ai_assistant = DocumentAI(self.config_manager)
                     self._parse_with_ai()
 
@@ -285,27 +285,3 @@ class Document:
         ]
         
         return any(text.startswith(keyword) for keyword in main_section_keywords)
-
-    def format_sections(self):
-        """
-        格式化章节，包括添加分节符和应用格式
-        """
-        # 先添加分节符
-        self.add_section_breaks()
-        
-        # 然后应用格式
-        sections = self.get_all_sections()
-        for section_name, paragraphs in sections.items():
-            # 格式化章节标题
-            if section_name in self.sections:
-                section_para = next((p for p in self.doc.paragraphs 
-                                 if p.text.strip() == section_name), None)
-                if section_para:
-                    if self._is_main_section_heading(section_name):
-                        self._apply_section_format(section_para, self.format_spec.heading1)
-                    else:
-                        self._apply_section_format(section_para, self.format_spec.heading2)
-            
-            # 格式化章节内容
-            for para in paragraphs:
-                self._apply_section_format(para, self.format_spec.body)
