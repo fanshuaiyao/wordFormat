@@ -127,12 +127,19 @@ class WordFormatter:
         style.font.bold = spec.bold
         style.font.italic = spec.italic
 
-        # 东亚字体（中文字体）
+        # 东亚字体（中文字体）和西文字体（ASCII）
         rPr = style.element.get_or_add_rPr()
         rFonts = rPr.find(qn('w:rFonts'))
         if rFonts is None:
             rFonts = etree.SubElement(rPr, qn('w:rFonts'))
-        rFonts.set(qn('w:eastAsia'), spec.font_name)
+
+        # 处理可能没有 cn 属性的向后兼容，防止出错
+        font_name_cn = getattr(spec, "font_name_cn", spec.font_name)
+
+        # 对应：西方文本字体 / 中文字体
+        rFonts.set(qn('w:ascii'), spec.font_name)
+        rFonts.set(qn('w:hAnsi'), spec.font_name)
+        rFonts.set(qn('w:eastAsia'), font_name_cn)
 
         # 对齐方式
         style.paragraph_format.alignment = ALIGNMENT_MAP.get(
@@ -146,13 +153,15 @@ class WordFormatter:
         style.paragraph_format.space_before = Pt(spec.space_before)
         style.paragraph_format.space_after = Pt(spec.space_after)
 
-        # 首行缩进 / 悬挂缩进
+        # 首行缩进 / 悬挂缩进 (以中文字符数计算: 缩进值 * 字体大小)
         if spec.first_line_indent > 0:
-            style.paragraph_format.first_line_indent = Pt(spec.first_line_indent)
+            indent_pt = spec.first_line_indent * spec.font_size
+            style.paragraph_format.first_line_indent = Pt(indent_pt)
             style.paragraph_format.left_indent = None
         elif spec.first_line_indent < 0:
-            style.paragraph_format.first_line_indent = Pt(spec.first_line_indent)
-            style.paragraph_format.left_indent = Pt(abs(spec.first_line_indent))
+            indent_pt = abs(spec.first_line_indent) * spec.font_size
+            style.paragraph_format.first_line_indent = Pt(-indent_pt)
+            style.paragraph_format.left_indent = Pt(indent_pt)
         else:
             style.paragraph_format.first_line_indent = None
             style.paragraph_format.left_indent = None

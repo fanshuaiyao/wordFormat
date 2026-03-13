@@ -18,7 +18,7 @@
     "bold": false,
     "italic": false,
     "alignment": "JUSTIFY",
-    "first_line_indent": 24,
+    "first_line_indent": 2.0,
     "line_spacing": 1.0,
     "space_before": 12,
     "space_after": 12
@@ -66,7 +66,7 @@
     "bold": false,
     "italic": false,
     "alignment": "JUSTIFY",
-    "first_line_indent": 24,
+    "first_line_indent": 2.0,
     "line_spacing": 1.5,
     "space_before": 0,
     "space_after": 0
@@ -78,7 +78,7 @@
     "bold": false,
     "italic": false,
     "alignment": "LEFT",
-    "first_line_indent": -24,
+    "first_line_indent": -2.0,
     "line_spacing": 1.0,
     "space_before": 0,
     "space_after": 6
