@@ -2,6 +2,7 @@
   "title": {
     "font_size": 16,
     "font_name": "Times New Roman",
+    "font_name_cn": "黑体",
     "bold": true,
     "italic": false,
     "alignment": "CENTER",
@@ -13,6 +14,7 @@
   "abstract": {
     "font_size": 12,
     "font_name": "Times New Roman",
+    "font_name_cn": "宋体",
     "bold": false,
     "italic": false,
     "alignment": "JUSTIFY",
@@ -24,6 +26,7 @@
   "keywords": {
     "font_size": 12,
     "font_name": "Times New Roman",
+    "font_name_cn": "宋体",
     "bold": false,
     "italic": false,
     "alignment": "LEFT",
@@ -33,8 +36,9 @@
     "space_after": 6
   },
   "heading1": {
-    "font_size": 14,
+    "font_size": 16,
     "font_name": "Times New Roman",
+    "font_name_cn": "黑体",
     "bold": true,
     "italic": false,
     "alignment": "LEFT",
@@ -44,8 +48,9 @@
     "space_after": 12
   },
   "heading2": {
-    "font_size": 13,
+    "font_size": 14,
     "font_name": "Times New Roman",
+    "font_name_cn": "黑体",
     "bold": true,
     "italic": false,
     "alignment": "LEFT",
@@ -55,8 +60,9 @@
     "space_after": 12
   },
   "body": {
-    "font_size": 12,
+    "font_size": 10.5,
     "font_name": "Times New Roman",
+    "font_name_cn": "宋体",
     "bold": false,
     "italic": false,
     "alignment": "JUSTIFY",
@@ -66,8 +72,9 @@
     "space_after": 0
   },
   "references": {
-    "font_size": 12,
+    "font_size": 10.5,
     "font_name": "Times New Roman",
+    "font_name_cn": "宋体",
     "bold": false,
     "italic": false,
     "alignment": "LEFT",

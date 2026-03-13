@@ -7,6 +7,7 @@ from pathlib import Path
 class SectionFormat:
     font_size: float
     font_name: str = "Times New Roman"
+    font_name_cn: str = "宋体"
     bold: bool = False
     italic: bool = False
     alignment: str = "LEFT"
