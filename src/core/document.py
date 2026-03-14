@@ -3,6 +3,7 @@ from docx.shared import Pt, Inches
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from docx.enum.style import WD_STYLE_TYPE
 import json
+import re
 from typing import Dict, Any
 
 class Document:
@@ -14,9 +15,10 @@ class Document:
         self.title = None
         self.abstract = None
         self.keywords = None
-        self.sections = {}
+        self.sections = {}     # 格式: {"标题文本": [段落1, 段落2...]}
+        self.section_levels = {} # 格式: {"标题文本": 级别数字(1为一级, 2为二级)}
         self.ai_assistant = None
-        
+
         # 先尝试通过文档样式来解析
         if not self._parse_by_styles():
             # 如果样式解析失败，试试使用传统方法
@@ -33,18 +35,17 @@ class Document:
         返回是否解析成功
         """
         try:
-            styles = [s.name for s in self.doc.styles if s.type == WD_STYLE_TYPE.PARAGRAPH]
             current_section = None
-            
+
             for para in self.doc.paragraphs:
                 if not para.text.strip():
                     continue
-                
-                style_name = para.style.name.lower()
-                
+
+                style_name = para.style.name.lower() if para.style else ""
+
                 # 通过样式名称识别各部分
-                if 'title' in style_name or '标题' in style_name:
-                    if not self.title:  # 只取第一个标题
+                if 'title' in style_name or '标题' in style_name and not any(str(i) in style_name for i in range(1,9)):
+                    if not self.title:  # 只取第一个文档标题
                         self.title = para
                 elif 'abstract' in style_name or '摘要' in style_name:
                     self.abstract = para
@@ -53,9 +54,14 @@ class Document:
                 elif 'heading 1' in style_name or '标题 1' in style_name:
                     current_section = para.text.strip()
                     self.sections[current_section] = []
+                    self.section_levels[current_section] = 1
+                elif 'heading 2' in style_name or '标题 2' in style_name:
+                    current_section = para.text.strip()
+                    self.sections[current_section] = []
+                    self.section_levels[current_section] = 2
                 elif current_section:
                     self.sections[current_section].append(para)
-            
+
             # 如果至少识别出标题和一个章节，则认为解析成功
             return bool(self.title and self.sections)
         except Exception as e:
@@ -64,48 +70,102 @@ class Document:
 
     def _parse_document_traditional(self) -> bool:
         """
-        使用传统方法解析文档结构
-        返回是否解析成功
+        使用正则和状态机辅助的传统方法解析文档结构
         """
         try:
             current_section = None
             found_structure = False
-            
-            for para in self.doc.paragraphs:
+
+            # 状态机：记录当前在解析哪一部分 ("title_check", "abstract", "keywords", "body")
+            current_state = "title_check"
+
+            paragraphs = self.doc.paragraphs
+
+            for i, para in enumerate(paragraphs):
                 text = para.text.strip()
                 if not text:
                     continue
-                
-                # 识别标题
-                if not self.title:
-                    self.title = para
-                    found_structure = True
-                    continue
-                
-                # 识别摘要部分
-                if text.lower().startswith('abstract') or text.startswith('摘要'):
+
+                # ------ 边界探测：摘要和关键词 ------
+                lower_text = text.lower()
+                if lower_text.startswith('abstract') or text.startswith('摘要'):
                     self.abstract = para
+                    current_state = "abstract"
                     found_structure = True
                     continue
-                
-                # 识别关键词
-                if text.lower().startswith('keywords') or text.startswith('关键词'):
+
+                if lower_text.startswith('keyword') or text.startswith('关键字') or text.startswith('关键词'):
                     self.keywords = para
+                    current_state = "keywords"
                     found_structure = True
                     continue
-                
-                # 识别章节标题
-                if self._is_section_heading(text):
+
+                # ------ 边界探测：章节标题 ------
+                heading_level = self._detect_heading_level(text)
+                if heading_level > 0:
                     current_section = text
                     self.sections[current_section] = []
+                    self.section_levels[current_section] = heading_level
+                    current_state = "body"
                     found_structure = True
-                elif current_section and text:
+                    continue
+
+                # ------ 第一段智能识别（如果既不是摘要也不是章节标题） ------
+                if current_state == "title_check" and not self.title:
+                    # 如果是很长的一段话（>50字），或者是带句号的句子，极大概率是直接开始写正文/摘要了，跳过标题
+                    if len(text) > 50 or text.endswith('。') or text.endswith('.'):
+                        current_state = "body" # 放弃抓取文档大标题
+                    else:
+                        self.title = para
+                        found_structure = True
+                    continue
+
+                # ------ 内容收集 ------
+                if current_state == "abstract" and not self.abstract:
+                    pass # 等待
+                elif current_state == "keywords" and not self.keywords:
+                    pass # 等待
+                elif current_section:
                     self.sections[current_section].append(para)
-            
+
             return found_structure
         except Exception as e:
             print(f"传统解析方法出错: {str(e)}")
             return False
+
+    def _detect_heading_level(self, text: str) -> int:
+        """
+        通过正则表达式智能判断标题级别
+        返回: 1(一级), 2(二级), 0(不是标题)
+        """
+        text = text.strip()
+
+        # === 一级标题规则 ===
+
+        # 1. 纯数字 + 点 + 文字 (如 "1. 引言" 或 "1 获取数据")，注意这里明确不要匹配第二个点
+        if re.match(r'^\d+\s*\.\s*[\u4e00-\u9fa5a-zA-Z]+', text) or re.match(r'^\d+\s+[\u4e00-\u9fa5a-zA-Z]+', text):
+            return 1
+
+        # 2. 中文编号 (如 "一、引言", "第一章 概述")
+        if re.match(r'^第?[一二三四五六七八九十]+[、\s]\s*[\u4e00-\u9fa5a-zA-Z]+', text):
+            return 1
+
+        # 3. 常见大章节独立关键词
+        main_keywords = r'^(引言|前言|概论|概述|研究背景|理论基础|研究方法|实验方法|实验|结果分析|实验结果|结果|讨论|结论|总结|参考文献|致谢|附录)$'
+        if re.match(main_keywords, text):
+            return 1
+
+        # === 二级标题规则 ===
+
+        # 1. 多级数字编号 (如 "1.1 研究背景", "2.1.3 具体实施")
+        if re.match(r'^\d+\.\d+(\.\d+)?\s*[\u4e00-\u9fa5a-zA-Z]*', text):
+            return 2
+
+        # 2. 带括号的中文编号 (如 "(一) 研究背景", "（二）相关工作")
+        if re.match(r'^[(（][一二三四五六七八九十]+[)）]\s*[\u4e00-\u9fa5a-zA-Z]*', text):
+            return 2
+
+        return 0
 
     def _parse_with_ai(self):
         """

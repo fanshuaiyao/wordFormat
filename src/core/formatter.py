@@ -69,11 +69,22 @@ class WordFormatter:
             for section_name, paragraphs in doc.sections.items():
                 # 章节标题段落
                 heading_para = self._find_heading_paragraph(section_name)
+
+                # 尝试从 document 对象中直接获取已经分析好的级别信息
+                heading_level = getattr(doc, 'section_levels', {}).get(section_name, None)
+
                 if heading_para:
-                    if self._is_main_heading(section_name):
+                    # 如果 document 层提供了确切的级别
+                    if heading_level == 1:
                         self._assign_paragraph_style(heading_para, "heading1")
-                    else:
+                    elif heading_level == 2:
                         self._assign_paragraph_style(heading_para, "heading2")
+                    else:
+                        # 降级方案：使用之前的字符串判断逻辑
+                        if self._is_main_heading(section_name):
+                            self._assign_paragraph_style(heading_para, "heading1")
+                        else:
+                            self._assign_paragraph_style(heading_para, "heading2")
 
                 # 判断是否为参考文献章节
                 is_references = '参考文献' in section_name or 'references' in section_name.lower()
